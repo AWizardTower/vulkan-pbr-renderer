@@ -33,6 +33,8 @@ namespace ade{
         uint32_t GetFramesInFlight() const { return static_cast<uint32_t>(mFrameResources.size()); }
 
         void EnqueueDeferredDelete(std::function<void()> task);
+        void BeginGpuScope(VkCommandBuffer cmdBuffer, const char *name);
+        void EndGpuScope(VkCommandBuffer cmdBuffer);
         void BeginFrameScope(VkCommandBuffer cmdBuffer);
         void EndFrameScope(VkCommandBuffer cmdBuffer);
     private:

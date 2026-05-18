@@ -2,26 +2,34 @@
 #include "Graphic/AdVKDevice.h"
 #include "Graphic/AdVKBuffer.h"
 
+#include <algorithm>
+
 namespace ade{
-    AdVKImage::AdVKImage(AdVKDevice *device, VkExtent3D extent, VkFormat format, VkImageUsageFlags usage, VkSampleCountFlagBits sampleCount) : mDevice(device),
-                                                                                                            mExtent(extent),
-                                                                                                            mFormat(format),
-                                                                                                            mUsage(usage) {
-        VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
-        bool isDepthStencilFormat = IsDepthStencilFormat(format);
-        if(isDepthStencilFormat || sampleCount > VK_SAMPLE_COUNT_1_BIT){
-            tiling = VK_IMAGE_TILING_OPTIMAL;
-        }
+    AdVKImage::AdVKImage(AdVKDevice *device,
+                         VkExtent3D extent,
+                         VkFormat format,
+                         VkImageUsageFlags usage,
+                         VkSampleCountFlagBits sampleCount,
+                         uint32_t mipLevels,
+                         uint32_t arrayLayers,
+                         VkImageCreateFlags imageCreateFlags) : mDevice(device),
+                                                                mExtent(extent),
+                                                                mFormat(format),
+                                                                mUsage(usage),
+                                                                mSampleCount(sampleCount),
+                                                                mMipLevels(std::max(1u, mipLevels)),
+                                                                mArrayLayers(std::max(1u, arrayLayers)) {
+        VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
 
         VkImageCreateInfo imageInfo = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                 .pNext = nullptr,
-                .flags = 0,
+                .flags = imageCreateFlags,
                 .imageType = VK_IMAGE_TYPE_2D,
                 .format = format,
                 .extent = extent,
-                .mipLevels = 1,
-                .arrayLayers = 1,
+                .mipLevels = mMipLevels,
+                .arrayLayers = mArrayLayers,
                 .samples = sampleCount,
                 .tiling = tiling,
                 .usage = usage,
@@ -46,8 +54,17 @@ namespace ade{
         CALL_VK(vkBindImageMemory(mDevice->GetHandle(), mHandle, mMemory, 0));
     }
 
-    AdVKImage::AdVKImage(AdVKDevice *device, VkImage image, VkExtent3D extent, VkFormat format, VkImageUsageFlags usage, VkSampleCountFlagBits sampleCount)
-                            : mHandle(image), mDevice(device), mExtent(extent), mFormat(format), mUsage(usage), bCreateImage(false) {
+    AdVKImage::AdVKImage(AdVKDevice *device,
+                         VkImage image,
+                         VkExtent3D extent,
+                         VkFormat format,
+                         VkImageUsageFlags usage,
+                         VkSampleCountFlagBits sampleCount,
+                         uint32_t mipLevels,
+                         uint32_t arrayLayers)
+                            : mHandle(image), mDevice(device), mExtent(extent), mFormat(format), mUsage(usage),
+                              mSampleCount(sampleCount), mMipLevels(std::max(1u, mipLevels)),
+                              mArrayLayers(std::max(1u, arrayLayers)), bCreateImage(false) {
     }
 
     AdVKImage::~AdVKImage() {
@@ -58,23 +75,44 @@ namespace ade{
     }
 
     void AdVKImage::CopyFromBuffer(VkCommandBuffer cmdBuffer, AdVKBuffer *buffer) {
+        CopyFromBuffer(cmdBuffer, buffer, 0, 0, 1, mExtent);
+    }
+
+    void AdVKImage::CopyFromBuffer(VkCommandBuffer cmdBuffer,
+                                   AdVKBuffer *buffer,
+                                   uint32_t mipLevel,
+                                   uint32_t baseArrayLayer,
+                                   uint32_t layerCount,
+                                   VkExtent3D extent) {
         VkBufferImageCopy region = {
             .bufferOffset = 0,
-            .bufferRowLength = mExtent.width,
-            .bufferImageHeight = mExtent.height,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
             .imageSubresource = {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = 0,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
+                    .mipLevel = mipLevel,
+                    .baseArrayLayer = baseArrayLayer,
+                    .layerCount = layerCount
             },
             .imageOffset = { 0, 0, 0 },
-            .imageExtent = { mExtent.width, mExtent.height, 1 }
+            .imageExtent = extent
         };
         vkCmdCopyBufferToImage(cmdBuffer, buffer->GetHandle(), mHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     }
 
-    bool AdVKImage::TransitionLayout(VkCommandBuffer cmdBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
+    bool AdVKImage::TransitionLayout(VkCommandBuffer cmdBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspectMask) {
+        return TransitionLayout(cmdBuffer, image, oldLayout, newLayout, aspectMask, 0, 1, 0, 1);
+    }
+
+    bool AdVKImage::TransitionLayout(VkCommandBuffer cmdBuffer,
+                                     VkImage image,
+                                     VkImageLayout oldLayout,
+                                     VkImageLayout newLayout,
+                                     VkImageAspectFlags aspectMask,
+                                     uint32_t baseMipLevel,
+                                     uint32_t mipLevelCount,
+                                     uint32_t baseArrayLayer,
+                                     uint32_t layerCount) {
         if(image == VK_NULL_HANDLE){
             return false;
         }
@@ -89,11 +127,11 @@ namespace ade{
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.aspectMask = aspectMask;
+        barrier.subresourceRange.baseMipLevel = baseMipLevel;
+        barrier.subresourceRange.levelCount = mipLevelCount;
+        barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+        barrier.subresourceRange.layerCount = layerCount;
 
         VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -169,7 +207,6 @@ namespace ade{
             case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
                 // Image will be used as a color attachment.
                 // Make sure any writes to the color buffer have finished.
-                barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
                 barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
                 break;
 
@@ -201,6 +238,183 @@ namespace ade{
                 0, nullptr,
                 1, &barrier
         );
+        return true;
+    }
+
+    bool AdVKImage::GenerateMipmaps2D(VkCommandBuffer cmdBuffer) {
+        if(mMipLevels <= 1){
+            return TransitionLayout(cmdBuffer, mHandle,
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                    VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, mArrayLayers);
+        }
+
+        VkFormatProperties formatProperties{};
+        vkGetPhysicalDeviceFormatProperties(mDevice->GetPhysicalDevice(), mFormat, &formatProperties);
+        if((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) == 0){
+            LOG_W("Format {0} does not support linear blit mip generation. Using base mip only.", vk_format_string(mFormat));
+            return TransitionLayout(cmdBuffer, mHandle,
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                    VK_IMAGE_ASPECT_COLOR_BIT, 0, mMipLevels, 0, mArrayLayers);
+        }
+
+        int32_t mipWidth = static_cast<int32_t>(mExtent.width);
+        int32_t mipHeight = static_cast<int32_t>(mExtent.height);
+
+        for(uint32_t i = 1; i < mMipLevels; i++){
+            VkImageMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = mHandle;
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier.subresourceRange.baseMipLevel = i - 1;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = mArrayLayers;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            vkCmdPipelineBarrier(cmdBuffer,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            VkImageBlit blit{};
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = i - 1;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = mArrayLayers;
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { std::max(1, mipWidth / 2), std::max(1, mipHeight / 2), 1 };
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = i;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = mArrayLayers;
+
+            vkCmdBlitImage(cmdBuffer,
+                           mHandle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           mHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &blit,
+                           VK_FILTER_LINEAR);
+
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(cmdBuffer,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            mipWidth = std::max(1, mipWidth / 2);
+            mipHeight = std::max(1, mipHeight / 2);
+        }
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = mHandle;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = mMipLevels - 1;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = mArrayLayers;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(cmdBuffer,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+        return true;
+    }
+
+    bool AdVKImage::GenerateMipmaps2DArray(VkCommandBuffer cmdBuffer,
+                                           VkImageLayout baseMipOldLayout,
+                                           VkImageLayout dstMipsOldLayout) {
+        if(mMipLevels <= 1){
+            return TransitionLayout(cmdBuffer, mHandle,
+                                    baseMipOldLayout,
+                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                    VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, mArrayLayers);
+        }
+
+        VkFormatProperties formatProperties{};
+        vkGetPhysicalDeviceFormatProperties(mDevice->GetPhysicalDevice(), mFormat, &formatProperties);
+        if((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) == 0){
+            LOG_W("Format {0} does not support linear blit mip generation. Using base mip only.", vk_format_string(mFormat));
+            TransitionLayout(cmdBuffer, mHandle,
+                             baseMipOldLayout,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, mArrayLayers);
+            TransitionLayout(cmdBuffer, mHandle,
+                             dstMipsOldLayout,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_IMAGE_ASPECT_COLOR_BIT, 1, mMipLevels - 1, 0, mArrayLayers);
+            return false;
+        }
+
+        TransitionLayout(cmdBuffer, mHandle,
+                         baseMipOldLayout,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, mArrayLayers);
+
+        int32_t mipWidth = static_cast<int32_t>(mExtent.width);
+        int32_t mipHeight = static_cast<int32_t>(mExtent.height);
+
+        for(uint32_t i = 1; i < mMipLevels; i++){
+            TransitionLayout(cmdBuffer, mHandle,
+                             dstMipsOldLayout,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, mArrayLayers);
+
+            VkImageBlit blit{};
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = i - 1;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = mArrayLayers;
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { std::max(1, mipWidth / 2), std::max(1, mipHeight / 2), 1 };
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = i;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = mArrayLayers;
+
+            vkCmdBlitImage(cmdBuffer,
+                           mHandle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           mHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &blit,
+                           VK_FILTER_LINEAR);
+
+            TransitionLayout(cmdBuffer, mHandle,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_IMAGE_ASPECT_COLOR_BIT, i - 1, 1, 0, mArrayLayers);
+
+            if(i < mMipLevels - 1){
+                TransitionLayout(cmdBuffer, mHandle,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, mArrayLayers);
+            }
+
+            mipWidth = std::max(1, mipWidth / 2);
+            mipHeight = std::max(1, mipHeight / 2);
+        }
+
+        TransitionLayout(cmdBuffer, mHandle,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_IMAGE_ASPECT_COLOR_BIT, mMipLevels - 1, 1, 0, mArrayLayers);
         return true;
     }
 }

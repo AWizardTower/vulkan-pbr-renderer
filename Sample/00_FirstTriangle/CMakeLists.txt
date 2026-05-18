@@ -5,3 +5,4 @@ add_executable(00_FirstTriangle
         Main.cpp
 )
 target_link_libraries(00_FirstTriangle PRIVATE adiosy_core)
+add_dependencies(00_FirstTriangle adiosy_sample_shaders)

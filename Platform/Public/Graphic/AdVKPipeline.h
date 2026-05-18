@@ -72,6 +72,7 @@ namespace ade{
                                   | VK_COLOR_COMPONENT_B_BIT
                                   | VK_COLOR_COMPONENT_A_BIT
         };
+        uint32_t colorBlendAttachmentCount = 1;
         PipelineDynamicState dynamicState;
     };
 
@@ -106,6 +107,7 @@ namespace ade{
         AdVKPipeline *SetRasterizationState(const PipelineRasterizationState &rasterizationState);
         AdVKPipeline *SetMultisampleState(VkSampleCountFlagBits samples, VkBool32 sampleShadingEnable, float minSampleShading = 0.f);
         AdVKPipeline *SetDepthStencilState(const PipelineDepthStencilState &depthStencilState);
+        AdVKPipeline *SetColorBlendAttachmentCount(uint32_t attachmentCount);
         AdVKPipeline *SetColorBlendAttachmentState(VkBool32 blendEnable,
                                                    VkBlendFactor srcColorBlendFactor = VK_BLEND_FACTOR_ONE, VkBlendFactor dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, VkBlendOp colorBlendOp = VK_BLEND_OP_ADD,
                                                    VkBlendFactor srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, VkBlendFactor dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, VkBlendOp alphaBlendOp = VK_BLEND_OP_ADD);

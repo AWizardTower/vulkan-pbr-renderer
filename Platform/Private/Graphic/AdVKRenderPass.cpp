@@ -148,4 +148,11 @@ namespace ade{
     void AdVKRenderPass::End(VkCommandBuffer cmdBuffer) const {
         vkCmdEndRenderPass(cmdBuffer);
     }
+
+    VkSampleCountFlagBits AdVKRenderPass::GetSubPassSampleCount(uint32_t subPassIndex) const {
+        if(subPassIndex >= mSubPasses.size()){
+            return VK_SAMPLE_COUNT_1_BIT;
+        }
+        return mSubPasses[subPassIndex].sampleCount;
+    }
 }

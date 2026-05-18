@@ -129,6 +129,10 @@ namespace ade{
         vkDestroyDevice(mHandle, nullptr);
     }
 
+    VkPhysicalDevice AdVKDevice::GetPhysicalDevice() const {
+        return mContext ? mContext->GetPhyDevice() : VK_NULL_HANDLE;
+    }
+
     void AdVKDevice::CreatePipelineCache() {
         VkPipelineCacheCreateInfo pipelineCacheInfo = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
@@ -170,14 +174,19 @@ namespace ade{
         queue->WaitIdle();
     }
 
-    VkResult AdVKDevice::CreateSimpleSampler(VkFilter filter, VkSamplerAddressMode addressMode, VkSampler *outSampler) {
+    VkResult AdVKDevice::CreateSimpleSampler(VkFilter filter,
+                                             VkSamplerAddressMode addressMode,
+                                             VkSampler *outSampler,
+                                             VkSamplerMipmapMode mipmapMode,
+                                             float minLod,
+                                             float maxLod) {
         VkSamplerCreateInfo samplerInfo = {
                 .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .magFilter = filter,
                 .minFilter = filter,
-                .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                .mipmapMode = mipmapMode,
                 .addressModeU = addressMode,
                 .addressModeV = addressMode,
                 .addressModeW = addressMode,
@@ -186,8 +195,8 @@ namespace ade{
                 .maxAnisotropy = 0,
                 .compareEnable = VK_FALSE,
                 .compareOp = VK_COMPARE_OP_NEVER,
-                .minLod = 0,
-                .maxLod = 1,
+                .minLod = minLod,
+                .maxLod = maxLod,
                 .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
                 .unnormalizedCoordinates = VK_FALSE
         };

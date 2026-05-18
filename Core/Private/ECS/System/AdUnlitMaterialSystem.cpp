@@ -6,6 +6,7 @@
 #include "Graphic/AdVKDescriptorSet.h"
 #include "Graphic/AdVKImageView.h"
 #include "Graphic/AdVKFrameBuffer.h"
+#include "Graphic/AdVKRenderPass.h"
 
 #include "Render/AdRenderTarget.h"
 #include "Render/AdRenderer.h"
@@ -107,7 +108,7 @@ namespace ade{
         mPipeline->SetVertexInputState(vertexBindings, vertexAttrs);
         mPipeline->EnableDepthTest();
         mPipeline->SetDynamicState({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR });
-        mPipeline->SetMultisampleState(VK_SAMPLE_COUNT_4_BIT, VK_FALSE);
+        mPipeline->SetMultisampleState(renderPass->GetSubPassSampleCount(), VK_FALSE);
         mPipeline->Create();
 
         AdRenderer *renderer = GetRenderer();

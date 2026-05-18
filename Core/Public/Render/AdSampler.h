@@ -6,7 +6,11 @@
 namespace ade{
     class AdSampler{
     public:
-        AdSampler(VkFilter filter = VK_FILTER_LINEAR, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
+        AdSampler(VkFilter filter = VK_FILTER_LINEAR,
+                  VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                  float minLod = 0.f,
+                  float maxLod = 1.f,
+                  VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR);
         ~AdSampler();
 
         VkSampler GetHandle() const { return mHandle; }
@@ -15,6 +19,9 @@ namespace ade{
 
         VkFilter mFilter;
         VkSamplerAddressMode mAddressMode;
+        float mMinLod = 0.f;
+        float mMaxLod = 1.f;
+        VkSamplerMipmapMode mMipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     };
 }
 

@@ -24,6 +24,13 @@ namespace ade{
         ReCreate();
     }
 
+    AdRenderTarget::AdRenderTarget(AdVKRenderPass *renderPass, const std::vector<std::vector<std::shared_ptr<AdVKImage>>> &externalImages, VkExtent2D extent)
+                        : mRenderPass(renderPass), mBufferCount(static_cast<uint32_t>(externalImages.size())),
+                          mExtent(extent), mExternalImages(externalImages), bExternalImageTarget(true) {
+        Init();
+        ReCreate();
+    }
+
     AdRenderTarget::~AdRenderTarget() {
         for (const auto &item: mMaterialSystemList){
             item->OnDestroy();
@@ -43,6 +50,8 @@ namespace ade{
         }
         mFrameBuffers.clear();
         mFrameBuffers.resize(mBufferCount);
+        mFrameBufferImages.clear();
+        mFrameBufferImages.resize(mBufferCount);
 
         AdRenderContext *renderCxt = AdApplication::GetAppContext()->renderCxt;
         AdVKDevice *device = renderCxt->GetDevice();
@@ -57,21 +66,32 @@ namespace ade{
 
         for(int i = 0; i < mBufferCount; i++){
             std::vector<std::shared_ptr<AdVKImage>> images;
-            for(int j = 0; j < attachments.size(); j++){
-                Attachment attachment = attachments[j];
-                if(bSwapchainTarget && attachment.finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && attachment.samples == VK_SAMPLE_COUNT_1_BIT){
-                    images.push_back(std::make_shared<AdVKImage>(device, swapchainImages[i], VkExtent3D{ mExtent.width, mExtent.height, 1 }, attachment.format, attachment.usage));
-                } else {
-                    images.push_back(std::make_shared<AdVKImage>(device, VkExtent3D{ mExtent.width, mExtent.height, 1 }, attachment.format, attachment.usage, attachment.samples));
+            if(bExternalImageTarget){
+                if(i >= mExternalImages.size() || mExternalImages[i].size() < attachments.size()){
+                    LOG_E("External render target images do not match render pass attachment count.");
+                    continue;
+                }
+                images = mExternalImages[i];
+            } else {
+                for(int j = 0; j < attachments.size(); j++){
+                    Attachment attachment = attachments[j];
+                    if(bSwapchainTarget && attachment.finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && attachment.samples == VK_SAMPLE_COUNT_1_BIT){
+                        images.push_back(std::make_shared<AdVKImage>(device, swapchainImages[i], VkExtent3D{ mExtent.width, mExtent.height, 1 }, attachment.format, attachment.usage));
+                    } else {
+                        images.push_back(std::make_shared<AdVKImage>(device, VkExtent3D{ mExtent.width, mExtent.height, 1 }, attachment.format, attachment.usage, attachment.samples));
+                    }
                 }
             }
+            mFrameBufferImages[i] = images;
             mFrameBuffers[i] = std::make_shared<AdVKFrameBuffer>(device, mRenderPass, images, mExtent.width, mExtent.height);
-            images.clear();
         }
     }
 
     void AdRenderTarget::Begin(VkCommandBuffer cmdBuffer) {
         assert(!bBeginTarget && "You should not called Begin() again.");
+        if(mBufferCount == 0){
+            return;
+        }
 
         if(bShouldUpdate){
             ReCreate();
@@ -88,6 +108,29 @@ namespace ade{
             mCurrentBufferIdx = (mCurrentBufferIdx + 1) % mBufferCount;
         }
 
+        BeginInternal(cmdBuffer, mCurrentBufferIdx);
+    }
+
+    void AdRenderTarget::BeginAt(VkCommandBuffer cmdBuffer, uint32_t bufferIndex) {
+        assert(!bBeginTarget && "You should not called BeginAt() again.");
+
+        if(bShouldUpdate){
+            ReCreate();
+            bShouldUpdate = false;
+        }
+        if(AdEntity::HasComponent<AdLookAtCameraComponent>(mCamera)){
+            mCamera->GetComponent<AdLookAtCameraComponent>().SetAspect(mExtent.width * 1.f / mExtent.height);
+        }
+
+        BeginInternal(cmdBuffer, bufferIndex);
+    }
+
+    void AdRenderTarget::BeginInternal(VkCommandBuffer cmdBuffer, uint32_t bufferIndex) {
+        if(bufferIndex >= mFrameBuffers.size()){
+            LOG_E("Render target buffer index out of range: {0}", bufferIndex);
+            return;
+        }
+        mCurrentBufferIdx = bufferIndex;
         mRenderPass->Begin(cmdBuffer, GetFrameBuffer(), mClearValues);
         AdVKDebugUtils::BeginLabel(cmdBuffer, "RenderTarget");
         bBeginTarget = true;
@@ -109,6 +152,29 @@ namespace ade{
     void AdRenderTarget::SetBufferCount(uint32_t bufferCount) {
         mBufferCount = bufferCount;
         bShouldUpdate = true;
+    }
+
+    void AdRenderTarget::SetExternalImages(const std::vector<std::vector<std::shared_ptr<AdVKImage>>> &externalImages, VkExtent2D extent) {
+        mExternalImages = externalImages;
+        mBufferCount = static_cast<uint32_t>(externalImages.size());
+        mExtent = extent;
+        bExternalImageTarget = true;
+        ReCreate();
+        bShouldUpdate = false;
+    }
+
+    AdVKFrameBuffer *AdRenderTarget::GetFrameBuffer(uint32_t bufferIndex) const {
+        if(bufferIndex >= mFrameBuffers.size()){
+            return nullptr;
+        }
+        return mFrameBuffers[bufferIndex].get();
+    }
+
+    AdVKImage *AdRenderTarget::GetAttachmentImage(uint32_t bufferIndex, uint32_t attachmentIndex) const {
+        if(bufferIndex >= mFrameBufferImages.size() || attachmentIndex >= mFrameBufferImages[bufferIndex].size()){
+            return nullptr;
+        }
+        return mFrameBufferImages[bufferIndex][attachmentIndex].get();
     }
 
     void AdRenderTarget::SetColorClearValue(VkClearColorValue colorClearValue) {

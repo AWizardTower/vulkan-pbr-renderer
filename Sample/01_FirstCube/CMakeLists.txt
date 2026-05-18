@@ -5,3 +5,4 @@ add_executable(01_FirstCube
         Main.cpp
 )
 target_link_libraries(01_FirstCube PRIVATE adiosy_core)
+add_dependencies(01_FirstCube adiosy_sample_shaders)

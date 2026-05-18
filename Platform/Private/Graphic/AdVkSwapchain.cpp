@@ -35,6 +35,11 @@ namespace ade{
         LOG_D("presentMode   : {0}", vk_present_mode_string(mSurfaceInfo.presentMode));
         LOG_D("-----------------------------");
 
+        if(mSurfaceInfo.capabilities.currentExtent.width == 0 || mSurfaceInfo.capabilities.currentExtent.height == 0){
+            LOG_W("Skip swapchain recreate because current extent is zero.");
+            return false;
+        }
+
         uint32_t imageCount = mDevice->GetSettings().swapchainImageCount;
         if(imageCount < mSurfaceInfo.capabilities.minImageCount && mSurfaceInfo.capabilities.minImageCount > 0){
             imageCount = mSurfaceInfo.capabilities.minImageCount;

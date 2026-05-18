@@ -10,7 +10,9 @@ namespace ade{
     };
 
     struct AdBaseMaterial : public AdMaterial{
-        BaseMaterialColor colorType;
+        BaseMaterialColor colorType = COLOR_TYPE_NORMAL;
+        float roughness = 0.5f;
+        float metallic = 0.0f;
     };
 
     struct AdBaseMaterialComponent : public AdMaterialComponent<AdBaseMaterial> {

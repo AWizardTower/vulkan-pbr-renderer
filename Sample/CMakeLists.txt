@@ -1,8 +1,68 @@
 cmake_minimum_required(VERSION 3.22)
 
+# shader files
+set(SHADERS
+        00_hello_triangle.vert
+        00_hello_triangle.frag
+        01_hello_buffer.vert
+        01_hello_buffer.frag
+        02_descriptor_set.frag
+        02_descriptor_set.vert
+        03_unlit_material.frag
+        03_unlit_material.vert
+        04_fullscreen_sample.vert
+        04_fullscreen_sample.frag
+        05_gbuffer.vert
+        05_gbuffer.frag
+        05_gbuffer_debug.vert
+        05_gbuffer_debug.frag
+        06_pbr_gbuffer.vert
+        06_pbr_gbuffer.frag
+        06_deferred_pbr.vert
+        06_deferred_pbr.frag
+        06_pbr_debug_composite.vert
+        06_pbr_debug_composite.frag
+        07_shadow_depth.vert
+        07_shadow_depth.frag
+        07_deferred_pbr_shadow.vert
+        07_deferred_pbr_shadow.frag
+        07_shadow_debug_composite.vert
+        07_shadow_debug_composite.frag
+        08_deferred_pbr_ibl.vert
+        08_deferred_pbr_ibl.frag
+        08_ibl_debug_composite.vert
+        08_ibl_debug_composite.frag
+        09_equirect_to_cube.vert
+        09_equirect_to_cube.frag
+        09_irradiance_convolution.vert
+        09_irradiance_convolution.frag
+        09_prefilter_env.vert
+        09_prefilter_env.frag
+        09_brdf_lut.vert
+        09_brdf_lut.frag
+        09_real_ibl_lighting.vert
+        09_real_ibl_lighting.frag
+        09_real_ibl_debug_composite.vert
+        09_real_ibl_debug_composite.frag
+)
+spirv_shaders(
+        SHADER_HEADERS
+        SPIRV_VERSION
+        1.0
+        SOURCES
+        ${SHADERS}
+)
+add_custom_target(adiosy_sample_shaders DEPENDS ${SHADER_HEADERS})
+
 add_subdirectory(SandBox)
 add_subdirectory(00_FirstTriangle)
 add_subdirectory(01_FirstCube)
 add_subdirectory(02_RenderTarget)
 add_subdirectory(03_Texture)
 add_subdirectory(04_ECS_Entity)
+add_subdirectory(05_RenderGraph)
+add_subdirectory(06_DeferredGBuffer)
+add_subdirectory(07_DeferredPBR)
+add_subdirectory(08_ShadowMapPCF)
+add_subdirectory(09_IBL)
+add_subdirectory(10_RealIBL)

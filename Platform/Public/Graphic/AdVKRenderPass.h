@@ -39,6 +39,7 @@ namespace ade{
         const std::vector<Attachment> &GetAttachments() const { return mAttachments; }
         uint32_t GetAttachmentSize() const { return mAttachments.size(); }
         const std::vector<RenderSubPass> &GetSubPasses() const { return mSubPasses; }
+        VkSampleCountFlagBits GetSubPassSampleCount(uint32_t subPassIndex = 0) const;
     private:
         VkRenderPass mHandle = VK_NULL_HANDLE;
         AdVKDevice *mDevice;

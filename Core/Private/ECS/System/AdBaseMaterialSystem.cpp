@@ -8,6 +8,7 @@
 
 #include "Graphic/AdVKPipeline.h"
 #include "Graphic/AdVKFrameBuffer.h"
+#include "Graphic/AdVKRenderPass.h"
 
 #include "ECS/AdEntity.h"
 #include "ECS/Component/AdLookAtCameraComponent.h"
@@ -60,7 +61,7 @@ namespace ade{
         mPipeline->SetVertexInputState(vertexBindings, vertexAttrs);
         mPipeline->SetInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)->EnableDepthTest();
         mPipeline->SetDynamicState({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR });
-        mPipeline->SetMultisampleState(VK_SAMPLE_COUNT_4_BIT, VK_FALSE);
+        mPipeline->SetMultisampleState(renderPass->GetSubPassSampleCount(), VK_FALSE);
         mPipeline->Create();
     }
 

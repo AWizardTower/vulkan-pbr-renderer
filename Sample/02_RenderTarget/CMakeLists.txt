@@ -5,3 +5,4 @@ add_executable(02_RenderTarget
         Main.cpp
 )
 target_link_libraries(02_RenderTarget PRIVATE adiosy_core)
+add_dependencies(02_RenderTarget adiosy_sample_shaders)

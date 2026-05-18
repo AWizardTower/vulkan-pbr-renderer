@@ -75,17 +75,19 @@ namespace ade{
             }
         }
         ExecuteDeferredDeletes(frame);
-        CALL_VK(vkResetFences(device->GetHandle(), 1, &frame.FrameFence));
 
         VkResult ret = swapchain->AcquireImage(outImageIndex, frame.ImageAvailable);
         if(ret == VK_ERROR_OUT_OF_DATE_KHR){
             bShouldUpdateTarget = ReCreateSwapchainIfNeeded(device, swapchain);
-            ret = swapchain->AcquireImage(outImageIndex, frame.ImageAvailable);
-            if(ret != VK_SUCCESS && ret != VK_SUBOPTIMAL_KHR){
-                LOG_E("Recreate swapchain error: {0}", vk_result_string(ret));
+            if(swapchain->GetWidth() > 0 && swapchain->GetHeight() > 0){
+                ret = swapchain->AcquireImage(outImageIndex, frame.ImageAvailable);
+                if(ret != VK_SUCCESS && ret != VK_SUBOPTIMAL_KHR){
+                    LOG_E("Recreate swapchain error: {0}", vk_result_string(ret));
+                }
             }
         }
         if(ret == VK_SUCCESS || ret == VK_SUBOPTIMAL_KHR){
+            CALL_VK(vkResetFences(device->GetHandle(), 1, &frame.FrameFence));
             frame.FrameNumber = mFrameNumber;
             frame.ImageIndex = *outImageIndex;
             frame.RenderFinished = GetRenderFinishedSemaphore(*outImageIndex);
@@ -131,14 +133,28 @@ namespace ade{
             return;
         }
         AdFrameResource &frame = mFrameResources[mCurrentFrameSlot];
-        AdVKDebugUtils::BeginLabel(cmdBuffer, "Frame");
         if(frame.GpuProfiler){
             frame.GpuProfiler->BeginFrame(cmdBuffer);
-            frame.GpuProfiler->BeginScope(cmdBuffer, "Frame");
         }
+        BeginGpuScope(cmdBuffer, "Frame");
     }
 
     void AdRenderer::EndFrameScope(VkCommandBuffer cmdBuffer) {
+        EndGpuScope(cmdBuffer);
+    }
+
+    void AdRenderer::BeginGpuScope(VkCommandBuffer cmdBuffer, const char *name) {
+        if(mFrameResources.empty()){
+            return;
+        }
+        AdFrameResource &frame = mFrameResources[mCurrentFrameSlot];
+        AdVKDebugUtils::BeginLabel(cmdBuffer, name);
+        if(frame.GpuProfiler){
+            frame.GpuProfiler->BeginScope(cmdBuffer, name);
+        }
+    }
+
+    void AdRenderer::EndGpuScope(VkCommandBuffer cmdBuffer) {
         if(mFrameResources.empty()){
             return;
         }

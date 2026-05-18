@@ -156,14 +156,18 @@ namespace ade{
                 .maxDepthBounds = 0.0f
         };
 
+        std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments(
+                mPipelineConfig.colorBlendAttachmentCount,
+                mPipelineConfig.colorBlendAttachmentState);
+
         VkPipelineColorBlendStateCreateInfo colorBlendStateInfo = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .logicOpEnable = VK_FALSE,
                 .logicOp = VK_LOGIC_OP_CLEAR,
-                .attachmentCount = 1,
-                .pAttachments = &mPipelineConfig.colorBlendAttachmentState,
+                .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
+                .pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data(),
         };
         colorBlendStateInfo.blendConstants[0] = colorBlendStateInfo.blendConstants[1] = colorBlendStateInfo.blendConstants[2] = colorBlendStateInfo.blendConstants[3] = 0;
 
@@ -239,6 +243,11 @@ namespace ade{
         mPipelineConfig.depthStencilState.depthCompareOp = depthStencilState.depthCompareOp;
         mPipelineConfig.depthStencilState.depthBoundsTestEnable = depthStencilState.depthBoundsTestEnable;
         mPipelineConfig.depthStencilState.stencilTestEnable = depthStencilState.stencilTestEnable;
+        return this;
+    }
+
+    AdVKPipeline *AdVKPipeline::SetColorBlendAttachmentCount(uint32_t attachmentCount) {
+        mPipelineConfig.colorBlendAttachmentCount = attachmentCount;
         return this;
     }
 

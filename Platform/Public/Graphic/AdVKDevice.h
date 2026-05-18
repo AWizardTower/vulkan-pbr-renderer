@@ -21,6 +21,7 @@ namespace ade{
         ~AdVKDevice();
 
         VkDevice GetHandle() const { return mHandle; }
+        VkPhysicalDevice GetPhysicalDevice() const;
 
         const AdVkSettings &GetSettings() const { return mSettings; }
         VkPipelineCache GetPipelineCache() const { return mPipelineCache; }
@@ -39,7 +40,12 @@ namespace ade{
         VkCommandBuffer CreateAndBeginOneCmdBuffer();
         void SubmitOneCmdBuffer(VkCommandBuffer cmdBuffer);
 
-        VkResult CreateSimpleSampler(VkFilter filter, VkSamplerAddressMode addressMode, VkSampler *outSampler);
+        VkResult CreateSimpleSampler(VkFilter filter,
+                                     VkSamplerAddressMode addressMode,
+                                     VkSampler *outSampler,
+                                     VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                                     float minLod = 0.f,
+                                     float maxLod = 1.f);
     private:
         void CreatePipelineCache();
         void CreateDefaultCmdPool();
