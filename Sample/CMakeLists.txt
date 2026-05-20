@@ -44,6 +44,10 @@ set(SHADERS
         09_real_ibl_lighting.frag
         09_real_ibl_debug_composite.vert
         09_real_ibl_debug_composite.frag
+        10_gltf_shadow_depth.vert
+        10_gltf_shadow_depth.frag
+        10_gltf_pbr_gbuffer.vert
+        10_gltf_pbr_gbuffer.frag
 )
 spirv_shaders(
         SHADER_HEADERS
@@ -66,3 +70,4 @@ add_subdirectory(07_DeferredPBR)
 add_subdirectory(08_ShadowMapPCF)
 add_subdirectory(09_IBL)
 add_subdirectory(10_RealIBL)
+add_subdirectory(11_GLTFPBR)

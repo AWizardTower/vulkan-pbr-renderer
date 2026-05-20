@@ -8,6 +8,7 @@ namespace ade {
         glm::vec3 position;
         glm::vec2 texcoord0;
         glm::vec3 normal;
+        glm::vec4 tangent{ 1.f, 0.f, 0.f, 1.f };
     };
 
     class AdGeometryUtil {

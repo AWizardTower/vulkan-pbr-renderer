@@ -19,6 +19,7 @@ add_library(adiosy_core
         Private/Render/AdRealIBLDeferredLightingPass.cpp
         Private/Render/AdRealIBLDebugCompositePass.cpp
         Private/Render/AdMesh.cpp
+        Private/Render/AdGLTFModel.cpp
         Private/Render/AdTexture.cpp
         Private/Render/AdHDRTexture.cpp
         Private/Render/AdSampler.cpp
@@ -33,7 +34,9 @@ add_library(adiosy_core
         Private/ECS/System/AdBaseMaterialSystem.cpp
         Private/ECS/System/AdGBufferMaterialSystem.cpp
         Private/ECS/System/AdPBRGBufferMaterialSystem.cpp
+        Private/ECS/System/AdGLTFPBRGBufferMaterialSystem.cpp
         Private/ECS/System/AdShadowDepthMaterialSystem.cpp
+        Private/ECS/System/AdGLTFShadowDepthMaterialSystem.cpp
         Private/ECS/System/AdUnlitMaterialSystem.cpp
 )
 target_link_libraries(adiosy_core PUBLIC adiosy_platform)

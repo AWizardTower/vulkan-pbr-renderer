@@ -5,6 +5,7 @@
 #include "Event/AdKeyEvent.h"
 #include "Event/AdMouseEvent.h"
 #include "Render/AdMesh.h"
+#include "Render/AdGLTFModel.h"
 #include "Render/AdHDRTexture.h"
 #include "Render/AdIBLPrecomputePass.h"
 #include "Render/AdIBLResources.h"
@@ -18,19 +19,22 @@
 #include "Graphic/AdVKRenderPass.h"
 
 #include "ECS/AdEntity.h"
+#include "ECS/Component/AdGLTFModelComponent.h"
 #include "ECS/Component/AdLookAtCameraComponent.h"
 #include "ECS/Component/AdTransformComponent.h"
+#include "ECS/System/AdGLTFPBRGBufferMaterialSystem.h"
+#include "ECS/System/AdGLTFShadowDepthMaterialSystem.h"
 #include "ECS/System/AdPBRGBufferMaterialSystem.h"
 #include "ECS/System/AdShadowDepthMaterialSystem.h"
 
 #include <cmath>
 
-class IBLApp : public ade::AdApplication{
+class GLTFPBRApp : public ade::AdApplication{
 protected:
     void OnConfiguration(ade::AppSettings *appSettings) override {
         appSettings->width = 1360;
         appSettings->height = 768;
-        appSettings->title = "10_RealIBL";
+        appSettings->title = "11_GLTFPBR";
     }
 
     void OnInit() override {
@@ -48,6 +52,8 @@ protected:
 
         CreateRenderPasses(device, swapchainFormat);
         CreateGraphResources(device->GetSettings().depthFormat, extent);
+        CreateMeshes();
+        LoadGLTFModel();
         mEnvironmentMap = std::make_shared<ade::AdHDRTexture>(AD_RES_TEXTURE_DIR"Environment/studio_small_09_1k.hdr");
         mIBLResources = std::make_shared<ade::AdIBLResources>(device);
         mIBLPrecomputePass = std::make_shared<ade::AdIBLPrecomputePass>(mIBLResources->GetColorFormat());
@@ -58,6 +64,7 @@ protected:
                 VkExtent2D{ ShadowMapSize, ShadowMapSize });
         mShadowRenderTarget->SetDepthStencilClearValue({ 1.f, 0 });
         mShadowRenderTarget->AddMaterialSystem<ade::AdShadowDepthMaterialSystem>(&mLightSettings.lightViewProj);
+        mShadowRenderTarget->AddMaterialSystem<ade::AdGLTFShadowDepthMaterialSystem>(&mLightSettings.lightViewProj);
 
         mGBufferRenderTarget = std::make_shared<ade::AdRenderTarget>(
                 mGBufferRenderPass.get(),
@@ -69,6 +76,8 @@ protected:
         mGBufferRenderTarget->SetColorClearValue(3, { 0.f, 0.f, 0.f, 0.f });
         mGBufferRenderTarget->SetDepthStencilClearValue({ 1.f, 0 });
         mGBufferRenderTarget->AddMaterialSystem<ade::AdPBRGBufferMaterialSystem>();
+        mGLTFGBufferSystem = mGBufferRenderTarget->AddMaterialSystem<ade::AdGLTFPBRGBufferMaterialSystem>();
+        ApplyGLTFDebugFeatureFlags();
 
         mLightingRenderTarget = std::make_shared<ade::AdRenderTarget>(
                 mLightingRenderPass.get(),
@@ -83,16 +92,16 @@ protected:
         mDebugCompositePass = std::make_shared<ade::AdRealIBLDebugCompositePass>(mPresentRenderPass.get(), mRenderer->GetFramesInFlight());
 
         SetupDebugInput();
+        PrintControls();
         BuildGraphPasses();
         EnsureCommandBuffers();
-        CreateMeshes();
     }
 
     void OnSceneInit(ade::AdScene *scene) override {
-        ade::AdEntity *camera = scene->CreateEntity("Shadow PCF Camera");
+        ade::AdEntity *camera = scene->CreateEntity("glTF PBR Camera");
         auto &cameraComp = camera->AddComponent<ade::AdLookAtCameraComponent>();
-        cameraComp.SetRadius(3.2f);
-        cameraComp.SetTarget({ 0.f, -0.18f, 0.f });
+        cameraComp.SetRadius(2.9f);
+        cameraComp.SetTarget({ 0.f, 0.05f, 0.f });
         mGBufferRenderTarget->SetCamera(camera);
         mCamera = camera;
 
@@ -101,23 +110,8 @@ protected:
         groundMaterial->roughness = 0.82f;
         groundMaterial->metallic = 0.0f;
 
-        auto lowRoughness = ade::AdMaterialFactory::GetInstance()->CreateMaterial<ade::AdBaseMaterial>();
-        lowRoughness->colorType = ade::COLOR_TYPE_TEXCOORD;
-        lowRoughness->roughness = 0.15f;
-        lowRoughness->metallic = 0.0f;
-
-        auto highRoughness = ade::AdMaterialFactory::GetInstance()->CreateMaterial<ade::AdBaseMaterial>();
-        highRoughness->colorType = ade::COLOR_TYPE_NORMAL;
-        highRoughness->roughness = 0.65f;
-        highRoughness->metallic = 0.0f;
-
-        auto metallic = ade::AdMaterialFactory::GetInstance()->CreateMaterial<ade::AdBaseMaterial>();
-        metallic->colorType = ade::COLOR_TYPE_TEXCOORD;
-        metallic->roughness = 0.25f;
-        metallic->metallic = 1.0f;
-
         {
-            ade::AdEntity *ground = scene->CreateEntity("Shadow Ground");
+            ade::AdEntity *ground = scene->CreateEntity("glTF Shadow Ground");
             auto &materialComp = ground->AddComponent<ade::AdBaseMaterialComponent>();
             materialComp.AddMesh(mCubeMesh.get(), groundMaterial);
             auto &transComp = ground->GetComponent<ade::AdTransformComponent>();
@@ -125,41 +119,37 @@ protected:
             transComp.position = { 0.f, -0.7f, 0.f };
             transComp.rotation = { 0.f, 0.f, 0.f };
         }
-        {
-            ade::AdEntity *cube = scene->CreateEntity("Shadow Cube Low Roughness");
-            auto &materialComp = cube->AddComponent<ade::AdBaseMaterialComponent>();
-            materialComp.AddMesh(mCubeMesh.get(), lowRoughness);
-            auto &transComp = cube->GetComponent<ade::AdTransformComponent>();
-            transComp.scale = { 0.75f, 0.75f, 0.75f };
-            transComp.position = { -1.f, -0.46f, -0.15f };
-            transComp.rotation = { 17.f, 30.f, 0.f };
-        }
-        {
-            ade::AdEntity *cube = scene->CreateEntity("Shadow Cube High Roughness");
-            auto &materialComp = cube->AddComponent<ade::AdBaseMaterialComponent>();
-            materialComp.AddMesh(mCubeMesh.get(), highRoughness);
-            auto &transComp = cube->GetComponent<ade::AdTransformComponent>();
-            transComp.scale = { 0.75f, 0.75f, 0.75f };
-            transComp.position = { 0.f, -0.46f, 0.2f };
-            transComp.rotation = { 17.f, 30.f, 0.f };
-        }
-        {
-            ade::AdEntity *cube = scene->CreateEntity("Shadow Cube Metallic");
-            auto &materialComp = cube->AddComponent<ade::AdBaseMaterialComponent>();
-            materialComp.AddMesh(mCubeMesh.get(), metallic);
-            auto &transComp = cube->GetComponent<ade::AdTransformComponent>();
-            transComp.scale = { 0.75f, 0.75f, 0.75f };
-            transComp.position = { 1.f, -0.46f, -0.05f };
-            transComp.rotation = { 17.f, 30.f, 0.f };
+
+        if(mGLTFModel && mGLTFModel->IsLoaded()){
+            ade::AdEntity *helmet = scene->CreateEntity("DamagedHelmet glTF");
+            helmet->AddComponent<ade::AdGLTFModelComponent>(mGLTFModel.get());
+            auto &transComp = helmet->GetComponent<ade::AdTransformComponent>();
+            glm::vec3 extent = mGLTFModel->GetBoundsExtent();
+            float maxExtent = std::max(std::max(extent.x, extent.y), extent.z);
+            float importScale = maxExtent > 0.0001f ? 1.4f / maxExtent : 1.f;
+            glm::vec3 center = mGLTFModel->GetBoundsCenter();
+            glm::vec3 boundsMin = mGLTFModel->GetBoundsMin();
+            constexpr float GroundTopY = -0.675f;
+
+            transComp.scale = { importScale, importScale, importScale };
+            transComp.position = {
+                -center.x * importScale,
+                GroundTopY - boundsMin.y * importScale,
+                -center.z * importScale
+            };
+            transComp.rotation = { 0.f, 0.f, 0.f };
+            mHelmet = helmet;
         }
     }
 
     void OnSceneDestroy(ade::AdScene *scene) override {
         mCamera = nullptr;
+        mHelmet = nullptr;
     }
 
     void OnUpdate(float deltaTime) override {
         UpdateOrbitCamera();
+        UpdateHelmetRotation(deltaTime);
     }
 
     void OnRender() override {
@@ -198,7 +188,6 @@ protected:
         ade::AdVKDevice *device = renderCxt->GetDevice();
         vkDeviceWaitIdle(device->GetHandle());
 
-        mCubeMesh.reset();
         mIBLPrecomputePass.reset();
         mIBLResources.reset();
         mEnvironmentMap.reset();
@@ -209,6 +198,8 @@ protected:
         mGBufferRenderTarget.reset();
         mLightingRenderTarget.reset();
         mPresentRenderTarget.reset();
+        mGLTFModel.reset();
+        mCubeMesh.reset();
         mGraph.reset();
         mShadowRenderPass.reset();
         mGBufferRenderPass.reset();
@@ -494,7 +485,7 @@ private:
                 context.SetTextureLayout(mShadowDepth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             });
 
-        mGraph->AddPass("RG.GBufferPass", {}, { mGBufferBaseColor, mGBufferNormal, mGBufferMaterial, mGBufferWorldPosition, mGBufferDepth },
+        mGraph->AddPass("RG.GLTFGBufferPass", {}, { mGBufferBaseColor, mGBufferNormal, mGBufferMaterial, mGBufferWorldPosition, mGBufferDepth },
             [this](ade::AdRenderGraphContext &context) {
                 context.DiscardTexture(mGBufferBaseColor);
                 context.DiscardTexture(mGBufferNormal);
@@ -560,6 +551,14 @@ private:
         std::vector<uint32_t> indices;
         ade::AdGeometryUtil::CreateCube(-0.3f, 0.3f, -0.3f, 0.3f, -0.3f, 0.3f, vertices, indices);
         mCubeMesh = std::make_shared<ade::AdMesh>(vertices, indices);
+    }
+
+    void LoadGLTFModel() {
+        mGLTFModel = std::make_shared<ade::AdGLTFModel>();
+        if(!mGLTFModel->LoadFromFile(AD_RES_MODEL_DIR"DamagedHelmet/glTF/DamagedHelmet.gltf")){
+            LOG_E("Failed to load DamagedHelmet glTF sample.");
+            mGLTFModel.reset();
+        }
     }
 
     void EnsureCommandBuffers() {
@@ -656,6 +655,20 @@ private:
                     mNeedsIBLPrecompute = true;
                     LOG_I("Real IBL continuous precompute: {0}", mContinuousIBLPrecompute ? "on" : "off");
                     break;
+                case ade::KEY_M:
+                    mAutoRotateHelmet = !mAutoRotateHelmet;
+                    LOG_I("DamagedHelmet auto rotation: {0}", mAutoRotateHelmet ? "on" : "off");
+                    break;
+                case ade::KEY_N:
+                    mNormalMapEnabled = !mNormalMapEnabled;
+                    ApplyGLTFDebugFeatureFlags();
+                    LOG_I("glTF normal map: {0}", mNormalMapEnabled ? "on" : "off");
+                    break;
+                case ade::KEY_O:
+                    mAmbientOcclusionEnabled = !mAmbientOcclusionEnabled;
+                    ApplyGLTFDebugFeatureFlags();
+                    LOG_I("glTF ambient occlusion: {0}", mAmbientOcclusionEnabled ? "on" : "off");
+                    break;
                 default:
                     break;
             }
@@ -670,6 +683,45 @@ private:
             radius = glm::clamp(radius, 1.2f, 8.0f);
             cameraComp.SetRadius(radius);
         });
+    }
+
+    void PrintControls() {
+        LOG_I("11_GLTFPBR Controls:");
+        LOG_I("  Drag mouse: orbit camera");
+        LOG_I("  Mouse wheel: zoom");
+        LOG_I("  1 Lit + Sky");
+        LOG_I("  2 EnvironmentCube");
+        LOG_I("  3 IrradianceCube");
+        LOG_I("  4 PrefilteredCube");
+        LOG_I("  5 BRDF LUT");
+        LOG_I("  6 ShadowFactor");
+        LOG_I("  7 BaseColor");
+        LOG_I("  8 Normal");
+        LOG_I("  9 Roughness");
+        LOG_I("  0 Metallic");
+        LOG_I("  [ / ] Prefilter debug mip");
+        LOG_I("  R Toggle continuous IBL precompute for RenderDoc");
+        LOG_I("  M Toggle DamagedHelmet auto rotation");
+        LOG_I("  N Toggle glTF normal map");
+        LOG_I("  O Toggle glTF ambient occlusion");
+    }
+
+    void ApplyGLTFDebugFeatureFlags() {
+        if(mGLTFGBufferSystem){
+            mGLTFGBufferSystem->SetDebugFeatureFlags(mNormalMapEnabled, mAmbientOcclusionEnabled);
+        }
+    }
+
+    void UpdateHelmetRotation(float deltaTime) {
+        if(!mAutoRotateHelmet || !mHelmet || !ade::AdEntity::HasComponent<ade::AdTransformComponent>(mHelmet)){
+            return;
+        }
+
+        auto &transComp = mHelmet->GetComponent<ade::AdTransformComponent>();
+        transComp.rotation.y += deltaTime * HelmetAutoRotationDegPerSecond;
+        if(transComp.rotation.y > 360.f){
+            transComp.rotation.y = std::fmod(transComp.rotation.y, 360.f);
+        }
     }
 
     void UpdateOrbitCamera() {
@@ -720,25 +772,32 @@ private:
     std::shared_ptr<ade::AdRenderTarget> mPresentRenderTarget;
     std::shared_ptr<ade::AdRealIBLDeferredLightingPass> mLightingPass;
     std::shared_ptr<ade::AdRealIBLDebugCompositePass> mDebugCompositePass;
+    std::shared_ptr<ade::AdGLTFPBRGBufferMaterialSystem> mGLTFGBufferSystem;
     ade::AdRealIBLDebugViewMode mDebugViewMode = ade::AdRealIBLDebugViewMode::Lit;
     ade::AdRealIBLLightSettings mLightSettings{};
     ade::AdRealIBLDebugSettings mDebugSettings{};
 
     std::vector<VkCommandBuffer> mCmdBuffers;
     std::shared_ptr<ade::AdMesh> mCubeMesh;
+    std::shared_ptr<ade::AdGLTFModel> mGLTFModel;
     std::shared_ptr<ade::AdHDRTexture> mEnvironmentMap;
     std::shared_ptr<ade::AdIBLResources> mIBLResources;
     std::shared_ptr<ade::AdIBLPrecomputePass> mIBLPrecomputePass;
     std::shared_ptr<ade::AdEventObserver> mObserver;
     ade::AdEntity *mCamera = nullptr;
+    ade::AdEntity *mHelmet = nullptr;
     bool mNeedsIBLPrecompute = true;
     bool mContinuousIBLPrecompute = false;
+    bool mAutoRotateHelmet = false;
+    bool mNormalMapEnabled = true;
+    bool mAmbientOcclusionEnabled = true;
     float mPrefilterDebugMip = 0.f;
     bool bFirstMouseDrag = true;
     glm::vec2 mLastMousePos{ 0.f, 0.f };
     static constexpr float MouseSensitivity = 0.25f;
+    static constexpr float HelmetAutoRotationDegPerSecond = 20.f;
 };
 
 ade::AdApplication *CreateApplicationEntryPoint(){
-    return new IBLApp();
+    return new GLTFPBRApp();
 }

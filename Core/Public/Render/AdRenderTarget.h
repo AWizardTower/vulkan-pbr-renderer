@@ -37,10 +37,11 @@ namespace ade{
         void SetDepthStencilClearValue(uint32_t attachmentIndex, VkClearDepthStencilValue depthStencilValue);
 
         template<typename T, typename... Args>
-        void AddMaterialSystem(Args&&... args) {
-            std::shared_ptr<AdMaterialSystem> system = std::make_shared<T>(std::forward<Args>(args)...);
+        std::shared_ptr<T> AddMaterialSystem(Args&&... args) {
+            std::shared_ptr<T> system = std::make_shared<T>(std::forward<Args>(args)...);
             system->OnInit(mRenderPass);
             mMaterialSystemList.push_back(system);
+            return system;
         }
 
         void RenderMaterialSystems(VkCommandBuffer cmdBuffer) {

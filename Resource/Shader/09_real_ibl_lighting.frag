@@ -90,6 +90,7 @@ void main() {
 
     float roughness = clamp(material.r, 0.04, 1.0);
     float metallic = clamp(material.g, 0.0, 1.0);
+    float ao = clamp(material.b, 0.0, 1.0);
 
     vec3 V = normalize(PC.cameraPosition.xyz - worldPosition);
     vec3 L = normalize(-PC.lightDirection.xyz);
@@ -114,14 +115,14 @@ void main() {
     vec3 directLighting = (diffuse + specular) * radiance * NoL * shadowFactor;
 
     vec3 irradiance = texture(irradianceCube, N).rgb;
-    vec3 diffuseIBL = irradiance * baseColor * (1.0 - metallic) * PC.iblParams.z;
+    vec3 diffuseIBL = irradiance * baseColor * (1.0 - metallic) * PC.iblParams.z * ao;
 
     vec3 R = reflect(-V, N);
     float maxPrefilterMip = max(float(textureQueryLevels(prefilteredCube) - 1), 0.0);
     vec3 prefilteredColor = textureLod(prefilteredCube, R, roughness * maxPrefilterMip).rgb;
     vec2 brdf = texture(brdfLUT, vec2(NoV, roughness)).rg;
     vec3 FEnv = FresnelSchlick(NoV, F0);
-    vec3 specularIBL = prefilteredColor * (FEnv * brdf.x + brdf.y) * PC.iblParams.w;
+    vec3 specularIBL = prefilteredColor * (FEnv * brdf.x + brdf.y) * PC.iblParams.w * ao;
 
     outColor = vec4(max(directLighting + diffuseIBL + specularIBL, vec3(0.0)), 1.0);
 }

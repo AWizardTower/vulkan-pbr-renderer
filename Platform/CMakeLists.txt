@@ -23,6 +23,7 @@ add_library(adiosy_platform
         Private/Graphic/AdVKDescriptorSet.cpp
 
         Private/Event/AdEventDispatcher.cpp
+        External/MikkTSpace/mikktspace.c
 )
 
 target_include_directories(adiosy_platform PUBLIC External)

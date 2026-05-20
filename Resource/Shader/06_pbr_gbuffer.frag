@@ -27,6 +27,6 @@ void main() {
 
     outBaseColor = vec4(baseColor, 1.0);
     outNormal = vec4(normal, 1.0);
-    outMaterial = vec4(roughness, metallic, 0.0, 1.0);
+    outMaterial = vec4(roughness, metallic, 1.0, 1.0);
     outWorldPosition = vec4(fragWorldPosition, 1.0);
 }
